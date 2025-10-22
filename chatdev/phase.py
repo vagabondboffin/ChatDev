@@ -84,6 +84,14 @@ class Phase(ABC):
         Returns:
 
         """
+        from enhanced_logger import enhanced_logger
+        enhanced_logger.log_agent_interaction(
+            phase=phase_name,
+            from_agent="System",
+            to_agent="All",
+            message=f"Starting phase: {phase_name}",
+            message_type="system_start"
+        )
 
         if placeholders is None:
             placeholders = {}

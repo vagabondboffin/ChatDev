@@ -11,7 +11,16 @@ from camel.configs import ChatGPTConfig
 from camel.typing import TaskType, ModelType
 from chatdev.chat_env import ChatEnv, ChatEnvConfig
 from chatdev.statistics import get_info
-from camel.web_spider import modal_trans
+# from camel.web_spider import modal_trans
+
+# Use our patched version that works with Ollama
+try:
+    from camel.web_spider_patched import modal_trans
+    print("✅ Using patched web_spider for Ollama compatibility")
+except ImportError:
+    # Fallback to original with error handling
+    from camel.web_spider import modal_trans
+
 from chatdev.utils import log_visualize, now
 
 

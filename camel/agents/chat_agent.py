@@ -29,12 +29,18 @@ from camel.utils import (
     openai_api_key_required,
 )
 from chatdev.utils import log_visualize
+
+# Force old API compatibility for Ollama integration
+openai_new_api = False  # Always use old API format
+
+# Keep the original try/except for reference but force the value
 try:
     from openai.types.chat import ChatCompletion
-
-    openai_new_api = True  # new openai api version
+    # We have the new API available but we're forcing old format for Ollama
+    print("OpenAI new API available but forcing old format for Ollama compatibility")
 except ImportError:
-    openai_new_api = False  # old openai api version
+    # Already set to False above
+    pass
 
 
 @dataclass(frozen=True)

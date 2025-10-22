@@ -1,3 +1,4 @@
+
 import requests
 from bs4 import BeautifulSoup
 import openai
@@ -6,19 +7,26 @@ import wikipediaapi
 import os
 import time
 
-self_api_key = os.environ.get('OPENAI_API_KEY')
+# Modified OpenAI client initialization that works with Ollama
+self_api_key = os.environ.get('OPENAI_API_KEY', 'ollama')  # Default to 'ollama'
 BASE_URL = os.environ.get('BASE_URL')
 
-if BASE_URL:
-    client = openai.OpenAI(
-        api_key=self_api_key,
-        base_url=BASE_URL,
-    )
-else:
-    client = openai.OpenAI(
-        api_key=self_api_key
-    )
+try:
+    if BASE_URL:
+        # For Ollama compatibility, use a simpler initialization
+        client = OpenAI(
+            api_key=self_api_key,
+            base_url=BASE_URL,
+        )
+    else:
+        client = OpenAI(api_key=self_api_key)
+except TypeError as e:
+    # Fallback if there's an initialization error (like proxies issue)
+    print(f"OpenAI client initialization warning: {e}")
+    print("Using fallback client configuration...")
+    client = OpenAI(api_key=self_api_key, base_url=BASE_URL) if BASE_URL else OpenAI(api_key=self_api_key)
 
+    
 def get_baidu_baike_content(keyword):
     # design api by the baidubaike
     url = f'https://baike.baidu.com/item/{keyword}'

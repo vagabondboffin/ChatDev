@@ -1,204 +1,156 @@
-# =========== Copyright 2023 @ CAMEL-AI.org. All Rights Reserved. ===========
-# Licensed under the Apache License, Version 2.0 (the “License”);
-# you may not use this file except in compliance with the License.
-# You may obtain a copy of the License at
-#
-#     http://www.apache.org/licenses/LICENSE-2.0
-#
-# Unless required by applicable law or agreed to in writing, software
-# distributed under the License is distributed on an “AS IS” BASIS,
-# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
-# See the License for the specific language governing permissions and
-# limitations under the License.
-# =========== Copyright 2023 @ CAMEL-AI.org. All Rights Reserved. ===========
-from abc import ABC, abstractmethod
-from typing import Any, Dict
-
-import openai
-import tiktoken
+import os
+import requests
+import json
+import logging
+from typing import List, Dict, Any
+import time
+from datetime import datetime
 
 from camel.typing import ModelType
-from chatdev.statistics import prompt_cost
-from chatdev.utils import log_visualize
 
-try:
-    from openai.types.chat import ChatCompletion
+# Import our enhanced logger
+import sys
 
-    openai_new_api = True  # new openai api version
-except ImportError:
-    openai_new_api = False  # old openai api version
-
-import os
-
-OPENAI_API_KEY = os.environ['OPENAI_API_KEY']
-if 'BASE_URL' in os.environ:
-    BASE_URL = os.environ['BASE_URL']
-else:
-    BASE_URL = None
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from enhanced_logger import enhanced_logger
 
 
-class ModelBackend(ABC):
-    r"""Base class for different model backends.
-    May be OpenAI API, a local LLM, a stub for unit tests, etc."""
-
-    @abstractmethod
-    def run(self, *args, **kwargs):
-        r"""Runs the query to the backend model.
-
-        Raises:
-            RuntimeError: if the return value from OpenAI API
-            is not a dict that is expected.
-
-        Returns:
-            Dict[str, Any]: All backends must return a dict in OpenAI format.
-        """
-        pass
-
-
-class OpenAIModel(ModelBackend):
-    r"""OpenAI API in a unified ModelBackend interface."""
-
-    def __init__(self, model_type: ModelType, model_config_dict: Dict) -> None:
-        super().__init__()
+class OllamaModelBackend:
+    def __init__(self, model_type):
         self.model_type = model_type
-        self.model_config_dict = model_config_dict
+        self.model_name = os.environ.get("OLLAMA_MODEL", "llama2")
+        self.base_url = os.environ.get("OPENAI_BASE_URL", "http://localhost:11434/v1").replace('/v1', '')
+        self.logger = logging.getLogger("OllamaModelBackend")
 
-    def run(self, *args, **kwargs):
-        string = "\n".join([message["content"] for message in kwargs["messages"]])
-        encoding = tiktoken.encoding_for_model(self.model_type.value)
-        num_prompt_tokens = len(encoding.encode(string))
-        gap_between_send_receive = 15 * len(kwargs["messages"])
-        num_prompt_tokens += gap_between_send_receive
+    def run(self, messages: List[Dict], **kwargs) -> Dict[str, Any]:
+        """Main method to get responses from Ollama using OpenAI-compatible API"""
 
-        if openai_new_api:
-            # Experimental, add base_url
-            if BASE_URL:
-                client = openai.OpenAI(
-                    api_key=OPENAI_API_KEY,
-                    base_url=BASE_URL,
-                )
-            else:
-                client = openai.OpenAI(
-                    api_key=OPENAI_API_KEY
-                )
+        start_time = time.time()
 
-            num_max_token_map = {
-                "gpt-3.5-turbo": 4096,
-                "gpt-3.5-turbo-16k": 16384,
-                "gpt-3.5-turbo-0613": 4096,
-                "gpt-3.5-turbo-16k-0613": 16384,
-                "gpt-4": 8192,
-                "gpt-4-0613": 8192,
-                "gpt-4-32k": 32768,
-                "gpt-4-turbo": 100000,
-                "gpt-4o": 4096, #100000
-                "gpt-4o-mini": 16384, #100000
-            }
-            num_max_token = num_max_token_map[self.model_type.value]
-            num_max_completion_tokens = num_max_token - num_prompt_tokens
-            self.model_config_dict['max_tokens'] = num_max_completion_tokens
-
-            response = client.chat.completions.create(*args, **kwargs, model=self.model_type.value,
-                                                      **self.model_config_dict)
-
-            cost = prompt_cost(
-                self.model_type.value,
-                num_prompt_tokens=response.usage.prompt_tokens,
-                num_completion_tokens=response.usage.completion_tokens
-            )
-
-            log_visualize(
-                "**[OpenAI_Usage_Info Receive]**\nprompt_tokens: {}\ncompletion_tokens: {}\ntotal_tokens: {}\ncost: ${:.6f}\n".format(
-                    response.usage.prompt_tokens, response.usage.completion_tokens,
-                    response.usage.total_tokens, cost))
-            if not isinstance(response, ChatCompletion):
-                raise RuntimeError("Unexpected return from OpenAI API")
-            return response
-        else:
-            num_max_token_map = {
-                "gpt-3.5-turbo": 4096,
-                "gpt-3.5-turbo-16k": 16384,
-                "gpt-3.5-turbo-0613": 4096,
-                "gpt-3.5-turbo-16k-0613": 16384,
-                "gpt-4": 8192,
-                "gpt-4-0613": 8192,
-                "gpt-4-32k": 32768,
-                "gpt-4-turbo": 100000,
-                "gpt-4o": 4096, #100000
-                "gpt-4o-mini": 16384, #100000
-            }
-            num_max_token = num_max_token_map[self.model_type.value]
-            num_max_completion_tokens = num_max_token - num_prompt_tokens
-            self.model_config_dict['max_tokens'] = num_max_completion_tokens
-
-            response = openai.ChatCompletion.create(*args, **kwargs, model=self.model_type.value,
-                                                    **self.model_config_dict)
-
-            cost = prompt_cost(
-                self.model_type.value,
-                num_prompt_tokens=response["usage"]["prompt_tokens"],
-                num_completion_tokens=response["usage"]["completion_tokens"]
-            )
-
-            log_visualize(
-                "**[OpenAI_Usage_Info Receive]**\nprompt_tokens: {}\ncompletion_tokens: {}\ntotal_tokens: {}\ncost: ${:.6f}\n".format(
-                    response["usage"]["prompt_tokens"], response["usage"]["completion_tokens"],
-                    response["usage"]["total_tokens"], cost))
-            if not isinstance(response, Dict):
-                raise RuntimeError("Unexpected return from OpenAI API")
-            return response
-
-
-class StubModel(ModelBackend):
-    r"""A dummy model used for unit tests."""
-
-    def __init__(self, *args, **kwargs) -> None:
-        super().__init__()
-
-    def run(self, *args, **kwargs) -> Dict[str, Any]:
-        ARBITRARY_STRING = "Lorem Ipsum"
-
-        return dict(
-            id="stub_model_id",
-            usage=dict(),
-            choices=[
-                dict(finish_reason="stop",
-                     message=dict(content=ARBITRARY_STRING, role="assistant"))
-            ],
+        # Log the request
+        enhanced_logger.log_llm_call(
+            agent="System",
+            messages=messages,
+            response="",  # Will be filled after we get response
+            model=self.model_name,
+            timestamp=start_time
         )
+
+        # Prepare the request for Ollama's OpenAI-compatible endpoint
+        payload = {
+            "model": self.model_name,
+            "messages": messages,
+            "temperature": kwargs.get("temperature", 0.7),
+            "max_tokens": kwargs.get("max_tokens", 4096),
+            "stream": False
+        }
+
+        try:
+            self.logger.info(f"Sending request to Ollama: model={self.model_name}, messages={len(messages)}")
+
+            # Use the OpenAI-compatible endpoint
+            response = requests.post(
+                f"{self.base_url}/v1/chat/completions",
+                json=payload,
+                timeout=kwargs.get("timeout", 120)
+            )
+            response.raise_for_status()
+
+            result = response.json()
+
+            # Log the raw response for debugging
+            self.logger.info(f"Raw Ollama response: {json.dumps(result)[:500]}...")
+
+            # Extract the response text - handle different possible response structures
+            response_text = ""
+            if 'choices' in result and len(result['choices']) > 0:
+                choice = result['choices'][0]
+                if 'message' in choice and 'content' in choice['message']:
+                    response_text = choice['message']['content']
+                elif 'text' in choice:  # Some models might return 'text' instead
+                    response_text = choice['text']
+                else:
+                    response_text = str(choice)  # Fallback
+            elif 'response' in result:  # Direct Ollama API format
+                response_text = result['response']
+            else:
+                response_text = "No response content found"
+
+            # Log the response
+            enhanced_logger.log_llm_call(
+                agent="System",
+                messages=messages,
+                response=response_text,
+                model=self.model_name,
+                timestamp=start_time
+            )
+
+            # Return in the exact format that ChatDev expects
+            # This matches the old OpenAI API response format
+            return {
+                "id": f"chatcmpl-{int(time.time())}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": self.model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": response_text,
+                        },
+                        "finish_reason": "stop"
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
+            }
+
+        except Exception as e:
+            self.logger.error(f"Ollama API error: {str(e)}")
+            # Log the error
+            enhanced_logger.log_llm_call(
+                agent="System",
+                messages=messages,
+                response=f"ERROR: {str(e)}",
+                model=self.model_name,
+                timestamp=start_time
+            )
+
+            # Return a properly formatted fallback response
+            return {
+                "id": f"chatcmpl-error-{int(time.time())}",
+                "object": "chat.completion",
+                "created": int(time.time()),
+                "model": self.model_name,
+                "choices": [
+                    {
+                        "index": 0,
+                        "message": {
+                            "role": "assistant",
+                            "content": f"Error: {str(e)} - Please try again",
+                        },
+                        "finish_reason": "stop"
+                    }
+                ],
+                "usage": {
+                    "prompt_tokens": 0,
+                    "completion_tokens": 0,
+                    "total_tokens": 0
+                }
+            }
+
+
+class ModelBackend:
+    def __new__(cls, model_type):
+        # Always use Ollama backend regardless of model_type
+        return OllamaModelBackend(model_type)
 
 
 class ModelFactory:
-    r"""Factory of backend models.
-
-    Raises:
-        ValueError: in case the provided model type is unknown.
-    """
-
     @staticmethod
-    def create(model_type: ModelType, model_config_dict: Dict) -> ModelBackend:
-        default_model_type = ModelType.GPT_3_5_TURBO
-
-        if model_type in {
-            ModelType.GPT_3_5_TURBO,
-            ModelType.GPT_3_5_TURBO_NEW,
-            ModelType.GPT_4,
-            ModelType.GPT_4_32k,
-            ModelType.GPT_4_TURBO,
-            ModelType.GPT_4_TURBO_V,
-            ModelType.GPT_4O,
-            ModelType.GPT_4O_MINI,
-            None
-        }:
-            model_class = OpenAIModel
-        elif model_type == ModelType.STUB:
-            model_class = StubModel
-        else:
-            raise ValueError("Unknown model")
-
-        if model_type is None:
-            model_type = default_model_type
-
-        # log_visualize("Model Type: {}".format(model_type))
-        inst = model_class(model_type, model_config_dict)
-        return inst
+    def create(model_type, model_config_dict=None):
+        return ModelBackend(model_type)

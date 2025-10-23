@@ -102,6 +102,43 @@ def get_info(dir, log_filepath):
                 code_lines += len([line for line in lines if len(line.strip()) > 0])
         # print("code_lines:", code_lines)
 
+    # Handle log file - check if it exists first
+    if not os.path.exists(log_filepath):
+        # Try to find the log file in the logs directory
+        logs_dir = os.path.join(os.path.dirname(dir), "logs")
+        if os.path.exists(logs_dir):
+            log_files = [f for f in os.listdir(logs_dir) if f.startswith('execution_') and f.endswith('.log')]
+            if log_files:
+                # Use the most recent log file
+                log_files.sort(reverse=True)
+                log_filepath = os.path.join(logs_dir, log_files[0])
+            else:
+                # No log file found, return basic info without log data
+                info = "\n\n💰**cost**=${:.6f}\n\n🔨**version_updates**={}\n\n📃**num_code_files**={}\n\n🏞**num_png_files**={}\n\n📚**num_doc_files**={}\n\n📃**code_lines**={}\n\n📋**env_lines**={}\n\n📒**manual_lines**={}\n\n*Log file not available for additional statistics*" \
+                    .format(0.0,
+                            version_updates,
+                            num_code_files,
+                            num_png_files,
+                            num_doc_files,
+                            code_lines,
+                            env_lines,
+                            manual_lines)
+                return info
+        else:
+            # No logs directory, return basic info
+            info = "\n\n💰**cost**=${:.6f}\n\n🔨**version_updates**={}\n\n📃**num_code_files**={}\n\n🏞**num_png_files**={}\n\n📚**num_doc_files**={}\n\n📃**code_lines**={}\n\n📋**env_lines**={}\n\n📒**manual_lines**={}\n\n*Log file not available for additional statistics*" \
+                .format(0.0,
+                        version_updates,
+                        num_code_files,
+                        num_png_files,
+                        num_doc_files,
+                        code_lines,
+                        env_lines,
+                        manual_lines)
+            return info
+
+    # If we get here, we have a valid log_filepath
+    try:
         lines = open(log_filepath, "r", encoding="utf8").read().split("\n")
         sublines = [line for line in lines if "| **model_type** |" in line]
         if len(sublines) > 0:
@@ -157,13 +194,15 @@ def get_info(dir, log_filepath):
                 num_reflection += 1
         # print("num_reflection:", num_reflection)
 
+    except FileNotFoundError:
+        # If log file still not found, use default values
+        pass
+
     cost = 0.0
     if num_png_files != -1:
         cost += num_png_files * 0.016
     if prompt_cost(model_type, num_prompt_tokens, num_completion_tokens) != -1:
         cost += prompt_cost(model_type, num_prompt_tokens, num_completion_tokens)
-
-    # info = f"🕑duration={duration}s 💰cost=${cost} 🔨version_updates={version_updates} 📃num_code_files={num_code_files} 🏞num_png_files={num_png_files} 📚num_doc_files={num_doc_files} 📃code_lines={code_lines} 📋env_lines={env_lines} 📒manual_lines={manual_lines} 🗣num_utterances={num_utterance} 🤔num_self_reflections={num_reflection} ❓num_prompt_tokens={num_prompt_tokens} ❗num_completion_tokens={num_completion_tokens} ⁉️num_total_tokens={num_total_tokens}"
 
     info = "\n\n💰**cost**=${:.6f}\n\n🔨**version_updates**={}\n\n📃**num_code_files**={}\n\n🏞**num_png_files**={}\n\n📚**num_doc_files**={}\n\n📃**code_lines**={}\n\n📋**env_lines**={}\n\n📒**manual_lines**={}\n\n🗣**num_utterances**={}\n\n🤔**num_self_reflections**={}\n\n❓**num_prompt_tokens**={}\n\n❗**num_completion_tokens**={}\n\n🌟**num_total_tokens**={}" \
         .format(cost,

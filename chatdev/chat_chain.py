@@ -186,12 +186,16 @@ class ChatChain:
         """
         start_time = now()
         filepath = os.path.dirname(__file__)
-        # root = "/".join(filepath.split("/")[:-1])
         root = os.path.dirname(filepath)
-        # directory = root + "/WareHouse/"
         directory = os.path.join(root, "WareHouse")
-        log_filepath = os.path.join(directory,
-                                    "{}.log".format("_".join([self.project_name, self.org_name, start_time])))
+
+        logs_directory = os.path.join(directory, "logs")
+        os.makedirs(logs_directory, exist_ok=True)
+
+        # Use the correct log file naming pattern that matches your actual log files
+        log_filename = "execution_{}.log".format(start_time)
+        log_filepath = os.path.join(logs_directory, log_filename)
+
         return start_time, log_filepath
 
     def pre_processing(self):
@@ -307,8 +311,12 @@ class ChatChain:
         datetime2 = datetime.strptime(now_time, time_format)
         duration = (datetime2 - datetime1).total_seconds()
 
+        # Use the actual log file path that exists
+        logs_directory = os.path.join(os.path.dirname(self.chat_env.env_dict['directory']), "logs")
+        actual_log_file = os.path.join(logs_directory, "execution_{}.log".format(self.start_time))
+
         post_info += "Software Info: {}".format(
-            get_info(self.chat_env.env_dict['directory'], self.log_filepath) + "\n\n🕑**duration**={:.2f}s\n\n".format(
+            get_info(self.chat_env.env_dict['directory'], actual_log_file) + "\n\n🕑**duration**={:.2f}s\n\n".format(
                 duration))
 
         post_info += "ChatDev Starts ({})".format(self.start_time) + "\n\n"
@@ -327,9 +335,10 @@ class ChatChain:
         logging.shutdown()
         time.sleep(1)
 
-        shutil.move(self.log_filepath,
-                    os.path.join(root + "/WareHouse", "_".join([self.project_name, self.org_name, self.start_time]),
-                                 os.path.basename(self.log_filepath)))
+        # Move the actual log file to the project directory
+        target_log_path = os.path.join(self.chat_env.env_dict['directory'], "execution_{}.log".format(self.start_time))
+        if os.path.exists(actual_log_file):
+            shutil.move(actual_log_file, target_log_path)
 
     # @staticmethod
     def self_task_improve(self, task_prompt):

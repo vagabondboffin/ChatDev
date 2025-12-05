@@ -8,7 +8,7 @@ from camel.typing import TaskType, ModelType
 from chatdev.chat_env import ChatEnv
 from chatdev.statistics import get_info
 from chatdev.utils import log_visualize, log_arguments
-
+import chatdev_ext.instrumentation_bootstrap
 
 class Phase(ABC):
 

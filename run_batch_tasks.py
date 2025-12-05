@@ -6,7 +6,7 @@ import argparse
 import time
 from datetime import datetime
 import subprocess
-
+import chatdev.instrumentation
 
 def load_tasks(json_file_path):
     """Load programming tasks from JSON file"""

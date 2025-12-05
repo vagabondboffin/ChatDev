@@ -13,6 +13,9 @@ from chatdev.chat_env import ChatEnv, ChatEnvConfig
 from chatdev.statistics import get_info
 # from camel.web_spider import modal_trans
 
+from chatdev_ext.telemetry import init_otel, tracer
+from opentelemetry import trace
+
 # Use our patched version that works with Ollama
 try:
     from camel.web_spider_patched import modal_trans
